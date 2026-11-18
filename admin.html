@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Joo Films Studio</title>
+  <link rel="stylesheet" href="/admin.css">
+  <script defer src="/admin.js"></script>
+</head>
+<body>
+  <main id="login" class="login">
+    <section class="login-card">
+      <div class="wordmark">JOO <span>FILMS</span></div>
+      <h1>Studio sign in</h1>
+      <p id="login-status" role="status">Checking access…</p>
+      <form id="login-form" hidden>
+        <label for="password">Admin password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="512">
+        <button class="primary" type="submit">Sign in</button>
+      </form>
+    </section>
+  </main>
+  <div id="studio" hidden>
+    <header class="top">
+      <a href="/" class="wordmark" target="_blank" rel="noopener">JOO <span>FILMS</span></a>
+      <span class="studio-label">Studio</span>
+      <span id="state" class="state"></span>
+      <div class="top-actions">
+        <button id="save">Save draft</button>
+        <button id="refresh">Preview</button>
+        <button class="primary" id="publish">Publish</button>
+        <button id="logout">Sign out</button>
+      </div>
+    </header>
+    <p id="status" role="status" aria-live="polite"></p>
+    <div class="shell">
+      <aside class="sidebar">
+        <nav id="tabs" aria-label="Dashboard">
+          <button data-tab="builder">Page builder</button>
+          <button data-tab="media">Videos &amp; logos</button>
+          <button data-tab="hero">Home background</button>
+          <button data-tab="seo">SEO</button>
+          <button data-tab="analytics">Analytics</button>
+          <button data-tab="backups">Backups</button>
+        </nav>
+        <div id="pages" class="pages"></div>
+      </aside>
+      <main id="panel" tabindex="-1"></main>
+      <section id="preview-pane" class="preview">
+        <div class="preview-head">
+          <div><strong>Draft preview</strong><small id="preview-path"></small></div>
+          <div class="segmented" aria-label="Preview size">
+            <button id="desktop" aria-pressed="true">Desktop</button>
+            <button id="mobile" aria-pressed="false">Mobile</button>
+          </div>
+        </div>
+        <div class="viewport">
+          <iframe id="preview-frame" title="Portfolio draft preview"></iframe>
+        </div>
+      </section>
+    </div>
+  </div>
+  <dialog id="confirm">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-note"></p>
+      <div class="actions">
+        <button value="cancel" autofocus>Cancel</button>
+        <button class="primary" value="confirm" id="confirm-action">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

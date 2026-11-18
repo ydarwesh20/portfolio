@@ -1,0 +1,10 @@
+.cms-section, .cms-page { padding: 7rem 8vw; }
+.cms-page { min-height: 75vh; padding-top: 11rem; }
+.cms-page .cms-section { padding: 3rem 0; }
+.cms-copy { max-width: 67ch; white-space: pre-line; line-height: 1.65; margin: 1.5rem 0; }
+.cms-section > img { display: block; max-width: min(100%, 960px); max-height: 75vh; object-fit: contain; }
+.cms-section .films { margin-top: 1.5rem; }
+.cms-section .film { max-width: min(100%, 960px); }
+.cms-section .films-portrait .film { max-width: min(100%, 450px); }
+.cms-brand { width: auto; max-width: 180px; height: 34px; display: block; object-fit: contain; }
+[data-cms-select].cms-selected { outline: 2px solid #d4af37; outline-offset: -2px; }

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "routes": [
+    {
+      "src": "^/$",
+      "dest": "/api/cms?route=site"
+    },
+    {
+      "src": "^/index\\.html$",
+      "dest": "/api/cms?route=site"
+    },
+    {
+      "src": "^/pages/([a-z0-9-]{1,60})/?$",
+      "dest": "/api/cms?route=page&slug=$1"
+    },
+    {
+      "src": "^/admin/?$",
+      "dest": "/api/cms?route=admin"
+    },
+    {
+      "src": "^/admin\\.html$",
+      "dest": "/api/cms?route=admin"
+    },
+    {
+      "handle": "filesystem"
+    }
+  ]
+}

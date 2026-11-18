@@ -169,14 +169,14 @@ class StudioHandler(BaseHTTPRequestHandler):
         self.send(200 if body else 404, body or "Page not found", "text/html", private=bool(configured), headers=headers)
 
     def do_GET(self):
-        self.handle_request()
+        self.process_cms_request()
 
     do_HEAD = do_GET
 
     def do_POST(self):
-        self.handle_request()
+        self.process_cms_request()
 
-    def handle_request(self):
+    def process_cms_request(self):
         try:
             self.dispatch()
         except PermissionError as exc:

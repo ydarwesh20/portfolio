@@ -155,20 +155,25 @@ class StudioHandler(BaseHTTPRequestHandler):
         self.send(200, path_on_disk.read_bytes(), mime, headers=headers)
 
     def public_page(self, path):
-        state = initial()
-        configured = False
+        headers = {"X-Robots-Tag": "noindex, nofollow"} if os.getenv("VERCEL_ENV") == "preview" else {}
         if enabled():
             try:
                 state = read_documents(storage())
-                configured = True
             except StorageError:
                 if any(os.getenv(name) for name in ("UPSTASH_REDIS_REST_URL", "KV_REST_API_URL", "CMS_LOCAL_DB")):
+                    self.log_error("CMS storage unavailable while serving public content")
+                    if path == "/":
+                        self.send(200, BASE, "text/html", headers=headers)
+                        return
                     self.send(503, "The portfolio is temporarily unavailable.", "text/plain",
-                              headers={"Retry-After": "30"})
+                              headers={**headers, "Retry-After": "30"})
                     return
-        body = render(state["live"], path, analytics=configured) if configured else BASE if path == "/" else None
-        headers = {"X-Robots-Tag": "noindex, nofollow"} if os.getenv("VERCEL_ENV") == "preview" else {}
-        self.send(200 if body else 404, body or "Page not found", "text/html", private=bool(configured), headers=headers)
+            else:
+                body = render(state["live"], path, analytics=True)
+                self.send(200 if body else 404, body or "Page not found", "text/html", headers=headers)
+                return
+        self.send(200 if path == "/" else 404, BASE if path == "/" else "Page not found",
+                  "text/html", private=False, headers=headers)
 
     def do_GET(self):
         self.process_cms_request()

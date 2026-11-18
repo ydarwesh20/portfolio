@@ -28,6 +28,8 @@ Run the isolated suite with `python3 -B cms_test.py`. It exercises requests thro
 
 `CMS_ENABLE_PRODUCTION=yes` explicitly enables the Studio backend in Vercel Production. Production has its own database credentials and password. Environment and preview branch are part of each storage key. Preview pages and authenticated drafts include no-index headers.
 
+If configured storage is temporarily unavailable, the homepage serves the bundled portfolio with a no-store cache policy. Custom pages and authenticated Studio requests return a temporary error until storage recovers.
+
 ## Editing and recovery
 
 - Use Page builder to edit existing sections, hide or reorder them, and add sections or pages. Added pages live at `/pages/<address>`. Choose a section inside the preview to open its inspector.

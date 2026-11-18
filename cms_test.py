@@ -83,6 +83,26 @@ class Studio(unittest.TestCase):
         self.assertEqual(self.request("GET", "/api/cms?route=site")[2].replace(
             '<script src="/cms-public.js" data-mode="analytics"></script>', ""), BASE)
 
+    def test_redis_outage_serves_original_home_until_recovery(self):
+        self.sign_in()
+        settings = {"VERCEL_ENV": "production", "CMS_ENABLE_PRODUCTION": "yes",
+                    "UPSTASH_REDIS_REST_URL": "https://redis.example.test",
+                    "UPSTASH_REDIS_REST_TOKEN": "test-token"}
+        with patch.dict(os.environ, settings):
+            with patch("cms_store.urlopen", side_effect=TimeoutError):
+                status, headers, body = self.request("GET", "/api/cms?route=site")
+                self.assertEqual((status, body), (200, BASE))
+                self.assertEqual(headers["Cache-Control"], "private, no-store")
+                self.assertEqual(self.request("HEAD", "/index.html")[0], 200)
+                status, headers, _ = self.request("GET", "/api/cms?route=page&slug=project")
+                self.assertEqual((status, headers["Retry-After"]), (503, "30"))
+                self.assertEqual(self.action("content", auth=False)[0], 401)
+                self.assertEqual(self.action("content")[0], 503)
+                with patch.dict(os.environ, {"VERCEL_ENV": "preview"}):
+                    self.assertEqual(self.request("GET", "/")[1]["X-Robots-Tag"], "noindex, nofollow")
+            with patch("cms_store.urlopen", return_value=io.BytesIO(b'{"result":null}')):
+                self.assertIn('data-mode="analytics"', self.request("GET", "/")[2])
+
     def test_access_and_origin(self):
         self.assertEqual(self.action("content")[0], 401)
         self.assertEqual(self.action("preview")[0], 401)

@@ -160,7 +160,7 @@ class StudioHandler(BaseHTTPRequestHandler):
                 state = read_documents(storage())
                 configured = True
             except StorageError:
-                if os.getenv("UPSTASH_REDIS_REST_URL") or os.getenv("CMS_LOCAL_DB"):
+                if any(os.getenv(name) for name in ("UPSTASH_REDIS_REST_URL", "KV_REST_API_URL", "CMS_LOCAL_DB")):
                     self.send(503, "The portfolio is temporarily unavailable.", "text/plain",
                               headers={"Retry-After": "30"})
                     return

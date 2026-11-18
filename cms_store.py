@@ -158,6 +158,8 @@ class Local:
 
 def storage():
     url, token = os.getenv("UPSTASH_REDIS_REST_URL"), os.getenv("UPSTASH_REDIS_REST_TOKEN")
+    if not url and not token:
+        url, token = os.getenv("KV_REST_API_URL"), os.getenv("KV_REST_API_TOKEN")
     if url and token:
         environment = os.getenv("VERCEL_ENV", "development")
         branch = os.getenv("VERCEL_GIT_COMMIT_REF", "standalone") if environment == "preview" else ""

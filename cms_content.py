@@ -532,6 +532,14 @@ def render(data, path="/", preview=False, analytics=False):
                              if target is link and attr == "href"), None)
                 if href not in data["fields"]:
                     attributes.setdefault(link.start, (link, {}))[1]["href"] = data["fields"][field_id]
+                text = next((t for t in link.children if isinstance(t, Text) and t.value.strip()), None)
+                text_key = next((fid for fid, (target, attr) in positions.items()
+                                 if target is text and attr == "text"), None)
+                if text and text_key not in data["fields"]:
+                    provider = "YouTube" if video(value)[0] == "youtube" else "Vimeo"
+                    replacement = re.sub(r"(?<=Watch on )(?:YouTube|Vimeo)", provider, text.value)
+                    if replacement != text.value:
+                        edits.replace(text.start, text.end, replacement)
 
     if data["logo"]:
         node = next(n for n in walk(nodes["navigation"]) if "nav-logo" in classes(n))
@@ -570,6 +578,47 @@ def render(data, path="/", preview=False, analytics=False):
     else:
         meta = data["seo"]
     meta_edits(edits, meta, preview)
+    additions = {}
+    for block in data["home"]:
+        if block["target"]:
+            additions.setdefault(block["target"], []).append(block)
+    if not page:
+        for gallery_id, collection in gallery_targets().items():
+            items_in_gallery = {id(node) for node in collection.children if isinstance(node, Node)}
+            removed = sum(id(positions[item_id][0]) in items_in_gallery for item_id in data["items"])
+            added = sum(bool(entry["url"]) for entry in additions.get(gallery_id, []))
+            if not removed and not added:
+                continue
+            parent = next(n for n in walk(nodes["work"])
+                          if n.tag == "details" and any(child is collection for child in n.children))
+            summary = next(n for n in parent.children if isinstance(n, Node) and n.tag == "summary")
+            count = len(items_in_gallery) - removed + added
+            for piece in summary.children:
+                if not isinstance(piece, Text):
+                    continue
+                text_id = next((fid for fid, (node, kind) in positions.items() if node is piece and kind == "text"), None)
+                if text_id in data["fields"]:
+                    continue
+                adjusted = re.sub(r"\b\d+(\s+(?:vertical\s+)?)videos?\b",
+                                  lambda hit: f"{count}{hit.group(1)}video{'s' if count != 1 else ''}",
+                                  piece.value)
+                if adjusted != piece.value:
+                    edits.replace(piece.start, piece.end, adjusted)
+    children = {}
+    for key, item in items.items():
+        if page and item["group"] != "navigation":
+            continue
+        children.setdefault(item["container"], []).append(key)
+    rank = {key: idx for idx, key in enumerate(data["itemOrder"])}
+    for keys_in_container in sorted(children.values(), key=lambda keys_: positions[keys_[0]][0].start, reverse=True):
+        if not any(key in rank or key in data["items"] for key in keys_in_container):
+            continue
+        original = [positions[key][0] for key in keys_in_container]
+        rendered = {key: edits.take(node) for key, node in zip(keys_in_container, original)}
+        active = [key for key in sorted(keys_in_container, key=lambda key: rank.get(key, len(rank)))
+                  if key not in data["items"]]
+        for idx, node in enumerate(original):
+            edits.replace(node.start, node.end, rendered[active[idx]] if idx < len(active) else "")
     if page:
         content = f'<main class="cms-page"><h1 class="big-title">{esc(page["title"])}</h1>'
         content += "".join(section(block, preview) for block in page["blocks"]) + "</main>"
@@ -577,30 +626,11 @@ def render(data, path="/", preview=False, analytics=False):
         edits.changes = [change for change in edits.changes if not start <= change[0] < end]
         edits.replace(start, end, content)
     else:
-        additions = {}
-        for block in data["home"]:
-            target = block["target"]
-            if target:
-                additions.setdefault(target, []).append(block)
         for target, values in additions.items():
             collection = (next(n for n in walk(nodes["clients"]) if "clients-grid" in classes(n))
                           if target == "clients" else gallery_targets()[target])
             end = BASE.rfind("</div>", collection.inner, collection.end)
             edits.replace(end, end, "".join((logo if target == "clients" else film)(b, preview) for b in values))
-
-        children = {}
-        for key, item in items.items():
-            children.setdefault(item["container"], []).append(key)
-        rank = {key: idx for idx, key in enumerate(data["itemOrder"])}
-        for keys_in_container in sorted(children.values(), key=lambda keys_: positions[keys_[0]][0].start, reverse=True):
-            if not any(key in rank or key in data["items"] for key in keys_in_container):
-                continue
-            original = [positions[key][0] for key in keys_in_container]
-            rendered = {key: edits.take(node) for key, node in zip(keys_in_container, original)}
-            active = [key for key in sorted(keys_in_container, key=lambda key: rank.get(key, len(rank)))
-                      if key not in data["items"]]
-            for idx, node in enumerate(original):
-                edits.replace(node.start, node.end, rendered[active[idx]] if idx < len(active) else "")
 
         if data["hero"] is not None:
             start = BASE.index("<script>", nodes["hero"].end)

@@ -22,7 +22,7 @@ Run the isolated suite with `python3 -B cms_test.py`. It exercises requests thro
 ## Vercel preview
 
 1. Use the `joo-films-admin-staging` branch with the existing Vercel project. Verify that Production Branch is `main` and that Preview Deployment Protection is enabled if available.
-2. Add `CMS_ADMIN_PASSWORD`, `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` to the Preview environment for this branch. Use a preview database and keep the password and token in Vercel's secret fields. Use a randomly generated password of at least 20 characters.
+2. Add `CMS_ADMIN_PASSWORD`, `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` to the Preview environment for this branch. Use a preview database and keep the password and token in Vercel's secret fields. The Vercel Upstash integration supplies `KV_REST_API_URL` and `KV_REST_API_TOKEN`, which Studio also accepts. Use a randomly generated password of at least 20 characters.
 3. Redeploy the branch as Preview and open `/admin` on the preview URL. Create a draft edit, check the public page stays at its published revision, preview the draft, publish to the preview environment, then restore a snapshot and confirm the preview publication.
 4. Test actual YouTube and Vimeo playback on desktop and mobile. Provider embedding and unlisted links can have domain or privacy restrictions.
 

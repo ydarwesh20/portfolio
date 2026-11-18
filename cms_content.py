@@ -31,6 +31,7 @@ KEY = re.compile(r"[a-zA-Z0-9_-]{1,70}")
 ALLOWED_ROBOTS = {"index, follow", "noindex, follow", "noindex, nofollow"}
 COLORING_TARGETS = {"coloring-stills": ("image", "grade-stills"),
                     "coloring-comparisons": ("comparison", "grade-comparisons")}
+RETIRED_TITLE_FIELDS = {"work-0-3-0-text", "coloring-0-3-0-text"}
 
 
 class Invalid(ValueError):
@@ -155,7 +156,7 @@ def catalog():
             continue
         group_nodes[name] = node
         groups[name] = {
-            "id": name, "label": name.replace("-", " ").capitalize(),
+            "id": name, "label": "Cuts" if name == "work" else name.replace("-", " ").capitalize(),
             "movable": node.tag == "section" or name == "portfolio-link",
         }
 
@@ -192,8 +193,13 @@ def catalog():
                 if attr in child.attrs and child.attrs[attr] is not None:
                     kind = {"href": "link", "src": "video" if child.tag == "iframe" else "image"}.get(attr, "text")
                     add_field(child, path, attr, child.attrs[attr], kind, item)
-            for idx, part in enumerate(child.children):
-                child_path = f"{path}-{idx}"
+            ordinal = 0
+            for part in child.children:
+                # Keyed insertions leave the field IDs of adjacent content unchanged.
+                key = part.attrs.get("data-cms-key") if isinstance(part, Node) else None
+                child_path = f"{path}-{key if key else ordinal}"
+                if not key:
+                    ordinal += 1
                 if isinstance(part, Node):
                     visit(part, child_path, item, path)
                 elif part.value.strip():
@@ -412,8 +418,12 @@ def galleries():
 def validate(data):
     require(isinstance(data, dict) and set(data) == set(empty()), "Unsupported document format")
     groups, fields, items, _, _, _, _ = catalog()
-    require(isinstance(data["fields"], dict) and set(data["fields"]) <= set(fields), "Unknown content field")
+    require(isinstance(data["fields"], dict) and set(data["fields"]) <= set(fields) | RETIRED_TITLE_FIELDS,
+            "Unknown content field")
     for field_id, value in data["fields"].items():
+        if field_id in RETIRED_TITLE_FIELDS:
+            string(value)
+            continue
         field = fields[field_id]
         kind = field["kind"]
         if kind == "text":
@@ -584,7 +594,7 @@ def render(data, path="/", preview=False, analytics=False):
     edits = Edits()
     attributes = {}
     for field_id, value in data["fields"].items():
-        if value == fields[field_id]["value"]:
+        if field_id in RETIRED_TITLE_FIELDS or value == fields[field_id]["value"]:
             continue
         node, prop = positions[field_id]
         if prop == "text":

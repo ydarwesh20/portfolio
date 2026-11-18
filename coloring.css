@@ -7,7 +7,9 @@
 }
 body > section[hidden], .nav-links li[hidden] { display: none !important; }
 body:not(:has(#work)) .portfolio-choice[href="#work"],
-body:not(:has(#coloring)) .portfolio-choice[href="#coloring"] { display: none; }
+body:not(:has(#work)) .nav-links li:has(> a[href="#work"]),
+body:not(:has(#coloring)) .portfolio-choice[href="#coloring"],
+body:not(:has(#coloring)) .nav-links li:has(> a[href="#coloring"]) { display: none; }
 .portfolio-choice:focus-visible,
 .grade-swipe:focus-within { outline: 2px solid var(--gold); outline-offset: 5px; }
 

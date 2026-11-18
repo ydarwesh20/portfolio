@@ -92,7 +92,7 @@ class Studio(unittest.TestCase):
     def test_coloring_assets_and_logo_draft(self):
         self.sign_in()
         html = self.request("GET", "/")[2]
-        self.assertIn('href="#work" class="cta-btn portfolio-choice">Edit</a>', html)
+        self.assertIn('href="#work" class="cta-btn portfolio-choice">Cuts</a>', html)
         self.assertIn('href="#coloring" class="cta-btn portfolio-choice">Coloring</a>', html)
         self.assertEqual(html.count('class="grade-range"'), 3)
         self.assertEqual(html.count('class="grade-still"'), 6)

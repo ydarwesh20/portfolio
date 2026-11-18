@@ -25,6 +25,8 @@ PUBLIC_ASSETS = {
     "/cms-public.js": ("cms-public.js", "text/javascript"),
     "/cms-public.css": ("cms-public.css", "text/css"),
     "/cms-hero.js": ("cms-hero.js", "text/javascript"),
+    "/coloring.css": ("coloring.css", "text/css"),
+    "/coloring.js": ("coloring.js", "text/javascript"),
 }
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; "
        "connect-src 'self'; frame-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
@@ -77,7 +79,7 @@ class StudioHandler(BaseHTTPRequestHandler):
         if isinstance(body, str):
             body = body.encode("utf-8")
         self.send_response(code)
-        self.send_header("Content-Type", mime + "; charset=utf-8")
+        self.send_header("Content-Type", mime if mime.startswith("image/") else mime + "; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -154,6 +156,12 @@ class StudioHandler(BaseHTTPRequestHandler):
         path_on_disk = Path(__file__).resolve().parent / name
         self.send(200, path_on_disk.read_bytes(), mime, headers=headers)
 
+    def coloring_image(self, path):
+        image = Path(__file__).resolve().parent / path.lstrip("/")
+        if not image.is_file():
+            return self.json(404, {"error": "Image not found"})
+        return self.send(200, image.read_bytes(), "image/jpeg", private=False)
+
     def public_page(self, path):
         headers = {"X-Robots-Tag": "noindex, nofollow"} if os.getenv("VERCEL_ENV") == "preview" else {}
         if enabled():
@@ -205,6 +213,8 @@ class StudioHandler(BaseHTTPRequestHandler):
         read = self.command in {"GET", "HEAD"}
         if read and path in PUBLIC_ASSETS:
             return self.asset(path)
+        if read and re.fullmatch(r"/assets/coloring/erth-[0-9]{3}-(log|final)\.jpg", path):
+            return self.coloring_image(path)
         if read and (path in {"/", "/index.html"} or path.startswith("/pages/")):
             return self.public_page("/" if path == "/index.html" else path)
         if path != "/api/cms":

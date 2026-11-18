@@ -1,3 +1,5 @@
+import base64
+import binascii
 import html
 import json
 import re
@@ -27,6 +29,8 @@ SEO = {
 SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 KEY = re.compile(r"[a-zA-Z0-9_-]{1,70}")
 ALLOWED_ROBOTS = {"index, follow", "noindex, follow", "noindex, nofollow"}
+COLORING_TARGETS = {"coloring-stills": ("image", "grade-stills"),
+                    "coloring-comparisons": ("comparison", "grade-comparisons")}
 
 
 class Invalid(ValueError):
@@ -162,16 +166,23 @@ def catalog():
                 "kind": kind, "value": "" if value.startswith("data:") else value,
                 "embedded": value.startswith("data:"),
             }
+            if name == "coloring" and "grade-log" in classes(owner):
+                fields[field_id]["imageRole"] = "log"
             positions[field_id] = (owner, prop)
 
         def visit(child, path, item=None, container=None):
             if child.tag in SKIP:
                 return
-            item_classes = {"work-card", "film", "client-tile", "svc", "tag", "clink"}
+            item_classes = {"work-card", "film", "client-tile", "svc", "tag", "clink", "grade-pair", "grade-still"}
             if classes(child) & item_classes or child.tag == "li":
                 item = f"{name}-{path}"
                 items[item] = {"id": item, "group": name, "label": label(child),
                                "parent": parent_items[-1] if parent_items else None, "container": f"{name}-{container}"}
+                if name == "coloring":
+                    comparing = "grade-pair" in classes(child)
+                    media = next(n for n in walk(child) if n.tag == ("figcaption" if comparing else "img"))
+                    items[item]["target"] = "coloring-comparisons" if comparing else "coloring-stills"
+                    items[item]["label"] = label(media)
                 positions[item] = (child, "item")
                 parent_items.append(item)
                 added = True
@@ -259,6 +270,27 @@ def url(value, kind):
     return value
 
 
+def inline_image_url(value, limit):
+    if not isinstance(value, str) or not value.startswith("data:"):
+        return url(value, "image")
+    require(len(value) <= limit, "Image is too large. Use a smaller file or an image URL")
+    match = re.fullmatch(r"data:image/(webp|png);base64,([A-Za-z0-9+/]+={0,2})", value)
+    require(match, "Use a PNG or WebP image")
+    try:
+        payload = base64.b64decode(match[2], validate=True)
+    except binascii.Error as exc:
+        raise Invalid("Invalid logo image") from exc
+    if match[1] == "webp":
+        require(payload[:4] == b"RIFF" and payload[8:12] == b"WEBP", "Invalid WebP logo image")
+    else:
+        require(payload.startswith(b"\x89PNG\r\n\x1a\n"), "Invalid PNG logo image")
+    return value
+
+
+def logo_url(value):
+    return inline_image_url(value, 24000)
+
+
 def video(value):
     parsed = urlsplit(value.strip())
     query = parse_qs(parsed.query)
@@ -322,23 +354,38 @@ def blocks(value, insertion=False):
     require(isinstance(value, list) and len(value) <= 80, "Too many sections")
     ids = []
     for block in value:
-        require(isinstance(block, dict) and set(block) ==
-                ({"id", "type", "title", "text", "url", "layout", "target"} if insertion
-                 else {"id", "type", "title", "text", "url", "layout"}), "Invalid section")
+        require(isinstance(block, dict), "Invalid section")
+        expected = {"id", "type", "title", "text", "url", "layout"}
+        target = block.get("target", "") if insertion else ""
+        require(isinstance(target, str), "Invalid destination")
+        coloring = COLORING_TARGETS.get(target)
+        if insertion:
+            expected.add("target")
+        if coloring:
+            expected.add("active")
+            if target == "coloring-comparisons":
+                expected.add("log")
+        require(set(block) == expected, "Invalid section")
         ids.append(block["id"])
-        require(isinstance(block["type"], str) and block["type"] in {"text", "image", "video", "logo"}, "Invalid section type")
         string(block["title"], 150)
         string(block["text"])
         require(isinstance(block["layout"], str) and block["layout"] in {"landscape", "portrait"}, "Invalid layout")
-        if block["type"] != "text":
+        if coloring:
+            require(block["type"] == coloring[0] and type(block["active"]) is bool, "Invalid coloring item")
+            final = inline_image_url(block["url"], 90000)
+            log = inline_image_url(block["log"], 90000) if "log" in block else final
+            require(not block["active"] or (final and log), "Add all images before making a coloring item active")
+            continue
+        require(isinstance(block["type"], str) and block["type"] in {"text", "image", "video", "logo"}, "Invalid section type")
+        if block["type"] == "logo":
+            logo_url(block["url"])
+        elif block["type"] != "text":
             url(block["url"], "video" if block["type"] == "video" else "image")
         else:
             require(block["url"] == "", "Text sections cannot contain media URLs")
-        if insertion:
-            require(isinstance(block["target"], str) and block["target"] in {"", "clients", *gallery_targets()}, "Invalid destination")
-            if block["target"]:
-                require((block["target"] == "clients" and block["type"] == "logo") or
-                        (block["target"] != "clients" and block["type"] == "video"), "Wrong media type for destination")
+        if target:
+            require(target == "clients" or target in gallery_targets(), "Invalid destination")
+            require(block["type"] == ("logo" if target == "clients" else "video"), "Wrong media type for destination")
     keys(ids, 80)
     return value
 
@@ -367,9 +414,14 @@ def validate(data):
     groups, fields, items, _, _, _, _ = catalog()
     require(isinstance(data["fields"], dict) and set(data["fields"]) <= set(fields), "Unknown content field")
     for field_id, value in data["fields"].items():
-        kind = fields[field_id]["kind"]
+        field = fields[field_id]
+        kind = field["kind"]
         if kind == "text":
             string(value)
+        elif kind == "image" and field["group"] == "clients":
+            require(logo_url(value), "Use Hide to remove a client logo")
+        elif kind == "image" and field["group"] == "coloring":
+            require(inline_image_url(value, 90000), "Use Inactive to hide a coloring item")
         else:
             require(url(value, kind), "Use Hide or Remove to remove a media item")
     require(set(keys(data["hidden"], 20)) <= set(groups), "Unknown section")
@@ -384,7 +436,7 @@ def validate(data):
     seo(data["seo"])
     if data["hero"] is not None:
         hero(data["hero"])
-    url(data["logo"], "image")
+    logo_url(data["logo"])
     require(isinstance(data["pages"], list) and len(data["pages"]) <= 24, "Too many pages")
     slugs = set()
     for page in data["pages"]:
@@ -464,6 +516,26 @@ def logo(block, preview=False):
         return ""
     return (f'<div class="client-tile"{selection(block, preview)}><img src="{esc(block["url"])}" '
             f'alt="{esc(block["title"])}" loading="lazy" decoding="async"></div>')
+
+
+def coloring_item(block, preview=False):
+    title = esc(block["title"])
+    selected = selection(block, preview)
+    final = esc(block["url"])
+    if block["type"] == "image":
+        return (f'<figure class="grade-still"{selected}><img src="{final}" alt="{title}" '
+                'loading="lazy" decoding="async"></figure>')
+    log = esc(block["log"])
+    caption = f'<figcaption>{title}</figcaption>' if title else ""
+    slider_label = f"Reveal LOG versus Final — {title}" if title else "Reveal LOG versus Final"
+    return (f'<figure class="grade-pair"{selected}><div class="grade-swipe">'
+            f'<img class="grade-final" src="{final}" alt="Final grade — {title}" loading="lazy" decoding="async">'
+            f'<img class="grade-log" src="{log}" alt="LOG — {title}" loading="lazy" decoding="async">'
+            '<span class="grade-label grade-label-log" aria-hidden="true">LOG</span>'
+            '<span class="grade-label grade-label-final" aria-hidden="true">FINAL</span>'
+            '<span class="grade-divider" aria-hidden="true"><span>‹ ›</span></span>'
+            f'<input class="grade-range" type="range" min="0" max="100" value="50" aria-label="{slider_label}">'
+            f'</div>{caption}</figure>')
 
 
 def section(block, preview=False):
@@ -580,7 +652,7 @@ def render(data, path="/", preview=False, analytics=False):
     meta_edits(edits, meta, preview)
     additions = {}
     for block in data["home"]:
-        if block["target"]:
+        if block["target"] and block.get("active", True):
             additions.setdefault(block["target"], []).append(block)
     if not page:
         for gallery_id, collection in gallery_targets().items():
@@ -627,6 +699,12 @@ def render(data, path="/", preview=False, analytics=False):
         edits.replace(start, end, content)
     else:
         for target, values in additions.items():
+            if target in COLORING_TARGETS:
+                _, class_name = COLORING_TARGETS[target]
+                collection = next(n for n in walk(nodes["coloring"]) if class_name in classes(n))
+                end = BASE.rfind("</div>", collection.inner, collection.end)
+                edits.replace(end, end, "".join(coloring_item(block, preview) for block in values))
+                continue
             collection = (next(n for n in walk(nodes["clients"]) if "clients-grid" in classes(n))
                           if target == "clients" else gallery_targets()[target])
             end = BASE.rfind("</div>", collection.inner, collection.end)

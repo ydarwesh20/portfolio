@@ -8,6 +8,7 @@ const tabs = [...$('#tabs').querySelectorAll('button')];
 const labels = {title: 'Page title', description: 'Meta description', keywords: 'Keywords', robots: 'Robots',
   'og:title': 'Social share title', 'og:description': 'Social share description',
   'og:image': 'Social share image URL', canonical: 'Canonical URL'};
+const coloringTargets = {'coloring-comparisons': 'Comparisons', 'coloring-stills': 'Stills'};
 let schema, data, revision, backups, publishedAt, unpublished;
 let dirty = false, busy = false, activeTab = 'builder', slug = '', selected = 'hero', search = '', mediaGroup = 'work';
 let analytics, lastFrame = '', frameFocus = false, dragging;
@@ -134,14 +135,16 @@ window.addEventListener('message', event => {
   if (event.origin !== location.origin || event.source !== frame.contentWindow || event.data?.type !== 'joo-select') return;
   const key = event.data.id;
   const item = schema.items.find(entry => entry.id === key);
+  const added = data.home.find(block => block.id === key);
   if (item && ['clients', 'work'].includes(item.group)) mediaGroup = item.group;
   const exists = schema.groups.some(group => group.id === key) || item ||
     [...data.home, ...(currentPage()?.blocks || [])].some(block => block.id === key);
   if (!exists) return;
   selected = key;
-  activeTab = item && ['clients', 'work'].includes(item.group) || data.home.some(block => block.id === key && block.target)
-    ? 'media' : 'builder';
-  if (activeTab === 'media' && !item) mediaGroup = data.home.find(block => block.id === key).target === 'clients' ? 'clients' : 'work';
+  if (key === 'coloring' || item?.group === 'coloring' || coloringTargets[added?.target]) activeTab = 'coloring';
+  else if (item && ['clients', 'work'].includes(item.group) || added?.target) activeTab = 'media';
+  else activeTab = 'builder';
+  if (activeTab === 'media' && !item) mediaGroup = added.target === 'clients' ? 'clients' : 'work';
   search = '';
   paint();
   $('#inspector')?.scrollIntoView({block: 'nearest'});
@@ -176,7 +179,9 @@ function openPage(next) {
 }
 function nav() {
   for (const tab of tabs) {
-    if (tab.dataset.tab === activeTab) tab.setAttribute('aria-current', 'page');
+    const collection = mediaGroup === 'work' ? 'work' : 'clients';
+    if (tab.dataset.tab === activeTab && (!tab.dataset.collection || tab.dataset.collection === collection))
+      tab.setAttribute('aria-current', 'page');
     else tab.removeAttribute('aria-current');
   }
   const list = $('#pages');
@@ -198,7 +203,7 @@ function paint() {
   panel.classList.toggle('wide', wide);
   $('#preview-pane').hidden = wide;
   panel.replaceChildren();
-  ({builder, media, hero, seo, analytics: showAnalytics, backups: showBackups})[activeTab]();
+  ({builder, media, coloring, hero, seo, analytics: showAnalytics, backups: showBackups})[activeTab]();
 }
 function choose(key) {
   selected = key;
@@ -250,6 +255,10 @@ function setOrder(order) {
 }
 function createBlock(type, target = '') {
   const block = {id: id(), type, title: '', text: '', url: '', layout: 'landscape'};
+  if (coloringTargets[target]) {
+    block.active = false;
+    if (type === 'comparison') block.log = '';
+  }
   if (!slug || target) {
     block.target = target;
     data.home.push(block);
@@ -323,7 +332,8 @@ function blockInspector(block) {
     input(block.type === 'logo' ? 'Brand name' : 'Heading', block.title, value => { block.title = value; changed(); }, {maxLength: 150}),
   ];
   if (!block.target) controls.push(input('Text', block.text, value => { block.text = value; changed(); }, {multiline: true}));
-  if (block.type !== 'text') controls.push(input(block.type === 'video' ? 'YouTube or Vimeo URL' : 'Image URL',
+  if (block.type === 'logo') controls.push(logoImage(block.url, value => { block.url = value; changed(); }));
+  else if (block.type !== 'text') controls.push(input(block.type === 'video' ? 'YouTube or Vimeo URL' : 'Image URL',
     block.url, value => { block.url = value; changed(); }, {placeholder: 'https://…'}));
   if (block.type === 'video' && !block.target) controls.push(input('Player aspect ratio', block.layout,
     value => { block.layout = value; changed(); }, {select: [['landscape', '16:9 landscape'], ['portrait', '9:16 portrait']]}));
@@ -363,7 +373,8 @@ function blockMoves(block, match) {
 }
 function existingInspector(entry, item) {
   const controls = [];
-  controls.push(check('Hide on the site', item ? !!data.items[entry.id] : data.hidden.includes(entry.id), value => {
+  controls.push(check(item && entry.group === 'coloring' ? 'Inactive' : 'Hide on the site',
+    item ? !!data.items[entry.id] : data.hidden.includes(entry.id), value => {
     if (item) {
       if (value) data.items[entry.id] = true;
       else delete data.items[entry.id];
@@ -380,12 +391,20 @@ function existingInspector(entry, item) {
     const attr = key.endsWith('-aria-label') ? 'aria-label' : key.split('-').at(-1);
     const kind = {alt: 'Alt text', href: 'Link', title: 'Player title', src: field.kind === 'video' ? 'Video URL' : 'Image URL',
       'aria-label': 'Accessible label', text: field.label}[attr];
-    controls.push(input(kind, data.fields[key] ?? field.value, value => {
+    const update = value => {
       if (value === field.value || field.kind !== 'text' && !value.trim()) delete data.fields[key];
       else data.fields[key] = value;
       changed();
-    }, {multiline: field.kind === 'text' && field.value.length > 90,
-      placeholder: field.embedded ? 'Embedded image · paste a URL to replace' : ''}));
+    };
+    const value = data.fields[key] ?? field.value;
+    if (item && entry.group === 'clients' && field.kind === 'image') {
+      controls.push(logoImage(value, update, field.embedded ? 'Default embedded logo' : 'Image URL'));
+    } else if (item && entry.group === 'coloring' && field.kind === 'image') {
+      controls.push(coloringImage(value, update, field.imageRole === 'log' ? 'LOG image' : 'Final image', field.value));
+    } else {
+      controls.push(input(kind, value, update, {multiline: field.kind === 'text' && field.value.length > 90,
+        placeholder: field.embedded ? 'Embedded image · paste a URL to replace' : ''}));
+    }
   }
   if (item) controls.push(...existingMoves(entry));
   if (!item) {
@@ -393,8 +412,7 @@ function existingInspector(entry, item) {
     if (!['clients', 'work'].includes(entry.id)) controls.push(...items.map(x => row(x, [])));
     else controls.push(button('Open media', () => { activeTab = 'media'; mediaGroup = entry.id; paint(); }));
   }
-  if (entry.id === 'navigation') controls.push(input('Site logo URL', data.logo, value => { data.logo = value; changed(); },
-    {placeholder: 'Default wordmark'}));
+  if (entry.id === 'navigation') controls.push(logoImage(data.logo, value => { data.logo = value; changed(); }, 'Default wordmark'));
   const parent = item && schema.items.find(x => x.id === entry.parent);
   if (parent) controls.unshift(button('Back to ' + parent.label, () => choose(parent.id)));
   if (item && entry.group === 'work') controls.push(...schema.items.filter(x => x.parent === entry.id).map(x => row(x, [])));
@@ -418,14 +436,159 @@ function existingMoves(entry) {
     return control;
   }))];
 }
+function logoImage(value, update, placeholder = 'https://…') {
+  return managedImage(value, update, {
+    label: 'Image URL', placeholder, uploadLabel: 'Upload logo image', limit: 24000, sizes: [480, 320, 220, 160],
+  });
+}
+
+function coloringImage(value, update, label, original = '') {
+  return managedImage(value, update, {
+    label: label + ' URL', uploadLabel: 'Upload ' + label, original, limit: 90000, sizes: [1440, 1200, 960, 800, 640],
+  });
+}
+
+function managedImage(value, update, {label, uploadLabel, limit, sizes, placeholder = 'https://…', original = ''}) {
+  const preview = el('img', null, 'logo-preview');
+  preview.alt = label + ' preview';
+  const show = source => {
+    preview.hidden = !source;
+    if (source) preview.src = source;
+    else preview.removeAttribute('src');
+  };
+  const control = input(label, value.startsWith('data:') ? '' : value, next => {
+    update(next);
+    show(next);
+  }, {placeholder: value.startsWith('data:') ? 'Uploaded image' : placeholder});
+  const urlField = control.querySelector('input');
+  const picker = el('input');
+  picker.type = 'file';
+  picker.accept = 'image/png,image/jpeg,image/webp';
+  picker.hidden = true;
+  picker.addEventListener('change', () => {
+    const file = picker.files[0];
+    if (!file) return;
+    operation(async () => {
+      if (file.size > 12_000_000) throw new Error('Choose a PNG, JPEG or WebP image under 12 MB.');
+      const source = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('The image file could not be read.'));
+        reader.readAsDataURL(file);
+      });
+      if (!/^data:image\/(png|jpeg|webp);base64,/.test(source))
+        throw new Error('Choose a PNG, JPEG or WebP image.');
+      const image = new Image();
+      image.src = source;
+      try { await image.decode(); }
+      catch { throw new Error('The selected file is not a readable image.'); }
+      const canvas = el('canvas');
+      for (const size of sizes) {
+        const scale = Math.min(1, size / Math.max(image.naturalWidth, image.naturalHeight));
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        const encoded = canvas.toDataURL('image/webp', 0.84);
+        if (encoded.length > limit) continue;
+        update(encoded);
+        show(encoded);
+        urlField.value = '';
+        urlField.placeholder = 'Uploaded image';
+        status('Image added to the draft. Save or preview to review it.');
+        return;
+      }
+      throw new Error('Try a smaller image or paste an image URL.');
+    });
+  });
+  show(value);
+  return append(el('div', null, 'stack'), control, preview, picker,
+    append(el('div', null, 'actions'),
+      button(uploadLabel, () => { picker.value = ''; picker.click(); }),
+      button(original ? 'Restore original image' : 'Clear image', () => {
+        update(original);
+        show(original);
+        urlField.value = original;
+        urlField.placeholder = placeholder;
+      })));
+}
+
+function coloring() {
+  panel.append(header('Coloring', 'Upload images or use direct image URLs. Make an item inactive to hide it from the site.'));
+  const section = schema.groups.find(group => group.id === 'coloring');
+  panel.append(card('Visibility',
+    check('Show the Coloring section', !data.hidden.includes(section.id), show => {
+      data.hidden = data.hidden.filter(key => key !== section.id);
+      if (!show) data.hidden.push(section.id);
+      changed();
+    }),
+    el('p', 'Use image URLs for a large gallery or full-resolution images. Uploaded images are compressed and stored in the draft.', 'muted')));
+  for (const [target, title] of Object.entries(coloringTargets)) {
+    const comparing = target === 'coloring-comparisons';
+    const selectedOriginal = schema.items.find(item => item.id === selected && item.target === target);
+    const added = data.home.filter(block => block.target === target);
+    const originals = schema.items.filter(item => item.target === target);
+    const order = new Map(data.itemOrder.map((id, index) => [id, index]));
+    originals.sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity));
+    const selectItem = (entry, description, active) =>
+      button(description + (active ? '' : ' · Inactive'), () => choose(entry.id), entry.id === selected ? 'active' : '');
+    panel.append(card(title,
+      append(el('div', null, 'actions'),
+        button(comparing ? '+ Add comparison' : '+ Add still', () => createBlock(comparing ? 'comparison' : 'image', target))),
+      append(el('div', null, 'stack'),
+        ...originals.map(item => selectItem(item, item.label, !data.items[item.id])),
+        ...added.map(block => selectItem(block, block.title || (comparing ? 'New comparison' : 'New still'), block.active)))));
+    if (selectedOriginal) existingInspector(selectedOriginal, true);
+    const block = added.find(item => item.id === selected);
+    if (block) coloringInspector(block, comparing);
+  }
+}
+
+function coloringInspector(block, comparing) {
+  const ready = () => block.url.trim() && (!comparing || block.log.trim());
+  const activation = check('Active on the site', block.active, active => {
+    if (active && !ready()) {
+      status('Add the required images before making this item active.', true);
+      activation.querySelector('input').checked = false;
+      return;
+    }
+    block.active = active;
+    changed();
+    paint();
+  });
+  const update = (key, value) => {
+    block[key] = value;
+    if (!ready()) {
+      block.active = false;
+      activation.querySelector('input').checked = false;
+    }
+    changed();
+  };
+  const area = card(block.title || (comparing ? 'New comparison' : 'New still'),
+    input(comparing ? 'Caption' : 'Image description', block.title, value => update('title', value), {maxLength: 150}),
+    comparing && coloringImage(block.log, value => update('log', value), 'LOG image'),
+    coloringImage(block.url, value => update('url', value), 'Final image'),
+    activation,
+    ...blockMoves(block, entry => entry.target === block.target),
+    button('Remove from draft', () => {
+      data.home = data.home.filter(item => item.id !== block.id);
+      selected = '';
+      changed();
+      paint();
+    }, 'danger'));
+  area.id = 'inspector';
+  panel.append(area);
+}
+
 function media() {
-  panel.append(header('Videos & logos', 'Replace links, reorder items or hide them in the draft.'));
-  panel.append(append(el('div', null, 'header'),
-    input('Collection', mediaGroup, value => { mediaGroup = value; selected = ''; search = ''; paint(); },
-      {select: [['work', 'Portfolio videos'], ['clients', 'Client logos'], ['brand', 'Site logo']]})));
+  const logos = mediaGroup !== 'work';
+  panel.append(header(logos ? 'Logos' : 'Portfolio videos',
+    logos ? 'Save or preview your changes before publishing.' : 'Replace links, reorder items or hide them in the draft.'));
+  if (logos) {
+    panel.append(append(el('div', null, 'actions'), ...[['clients', 'Client logos'], ['brand', 'Site logo']].map(([group, label]) =>
+      button(label, () => { mediaGroup = group; selected = ''; search = ''; paint(); }, mediaGroup === group ? 'active' : ''))));
+  }
   if (mediaGroup === 'brand') {
-    panel.append(card('Brand logo', input('Image URL', data.logo, value => { data.logo = value; changed(); },
-      {placeholder: 'Default wordmark'})));
+    panel.append(card('Header and footer', logoImage(data.logo, value => { data.logo = value; changed(); }, 'Default wordmark')));
     return;
   }
   const existing = schema.items.filter(item => item.group === mediaGroup);
@@ -447,7 +610,8 @@ function media() {
   let gallery = schema.galleries[0].id;
   const destination = mediaGroup === 'work' && input('Add video to', gallery, value => { gallery = value; },
     {select: schema.galleries.map(g => [g.id, g.label])});
-  panel.append(card(mediaGroup === 'work' ? 'Portfolio work' : 'Client logos',
+  panel.append(card(mediaGroup === 'work' ? 'Portfolio work' : 'Worked with · Client logos',
+    logos && el('p', 'Select an existing logo and use Hide on the site to remove it from the page.', 'muted'),
     searchField, destination, button(mediaGroup === 'work' ? '+ Add video' : '+ Add logo',
       () => createBlock(mediaGroup === 'work' ? 'video' : 'logo', mediaGroup === 'work' ? gallery : 'clients'))));
   const item = existing.find(entry => entry.id === selected);
@@ -600,8 +764,12 @@ function showBackups() {
 }
 for (const tab of tabs) tab.addEventListener('click', () => {
   activeTab = tab.dataset.tab;
+  if (tab.dataset.collection) {
+    mediaGroup = tab.dataset.collection;
+    selected = '';
+  }
   search = '';
-  if (activeTab === 'media' && slug) {
+  if (['media', 'coloring'].includes(activeTab) && slug) {
     slug = '';
     selected = '';
     preview();

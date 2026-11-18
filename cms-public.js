@@ -12,6 +12,7 @@
       target.scrollIntoView({block: 'center', behavior: 'smooth'});
     });
     document.addEventListener('click', event => {
+      if (event.target.closest('.grade-swipe, .portfolio-choice')) return;
       const target = event.target.closest('[data-cms-select]');
       if (event.target.closest('a')) event.preventDefault();
       if (target) parent.postMessage({type: 'joo-select', id: target.dataset.cmsSelect}, location.origin);

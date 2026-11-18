@@ -1,4 +1,5 @@
 import copy
+import base64
 import io
 import json
 import os
@@ -64,7 +65,12 @@ class Studio(unittest.TestCase):
         lines = head.decode().split("\r\n")
         status = int(lines[0].split()[1])
         headers = dict(line.split(": ", 1) for line in lines[1:])
-        response = json.loads(encoded) if encoded and headers["Content-Type"].startswith("application/json") else encoded.decode()
+        if headers["Content-Type"] == "image/jpeg":
+            response = encoded
+        elif encoded and headers["Content-Type"].startswith("application/json"):
+            response = json.loads(encoded)
+        else:
+            response = encoded.decode()
         return status, headers, response
 
     def action(self, name, payload=None, **kwargs):
@@ -82,6 +88,69 @@ class Studio(unittest.TestCase):
         self.assertEqual(len([i for i in schema()["items"] if i["group"] == "clients"]), 105)
         self.assertEqual(self.request("GET", "/api/cms?route=site")[2].replace(
             '<script src="/cms-public.js" data-mode="analytics"></script>', ""), BASE)
+
+    def test_coloring_assets_and_logo_draft(self):
+        self.sign_in()
+        html = self.request("GET", "/")[2]
+        self.assertIn('href="#work" class="cta-btn portfolio-choice">Edit</a>', html)
+        self.assertIn('href="#coloring" class="cta-btn portfolio-choice">Coloring</a>', html)
+        self.assertEqual(html.count('class="grade-range"'), 3)
+        self.assertEqual(html.count('class="grade-still"'), 6)
+        status, headers, picture = self.request("GET", "/assets/coloring/erth-032-log.jpg")
+        self.assertEqual((status, headers["Content-Type"]), (200, "image/jpeg"))
+        self.assertTrue(picture.startswith(b"\xff\xd8"))
+        self.assertEqual(self.request("GET", "/assets/coloring/erth-999-log.jpg")[0], 404)
+
+        draft = empty()
+        grade_pair = next(i for i in schema()["items"] if i["group"] == "coloring")
+        client = next(i for i in schema()["items"] if i["group"] == "clients")
+        draft["items"][grade_pair["id"]] = True
+        draft["items"][client["id"]] = True
+        image = base64.b64encode(b"\x89PNG\r\n\x1a\n").decode()
+        draft["home"].append({"id": "new-logo", "type": "logo", "title": "Test uploaded logo", "text": "",
+                              "url": "data:image/svg+xml;base64," + image, "layout": "landscape", "target": "clients"})
+        self.assertEqual(self.action("save", {"revision": 0, "draft": draft})[0], 400)
+        draft["home"][0]["url"] = "data:image/png;base64," + image
+        self.assertEqual(self.action("save", {"revision": 0, "draft": draft})[0], 200)
+        self.assertNotIn("Test uploaded logo", self.request("GET", "/")[2])
+        preview = self.action("preview")[2]
+        self.assertIn("Test uploaded logo", preview)
+        self.assertEqual(preview.count('class="grade-range"'), 2)
+        self.assertNotIn(f'data-cms-select="{client["id"]}"', preview)
+        self.assertEqual(self.action("publish", {"revision": 1})[0], 200)
+        self.assertIn("Test uploaded logo", self.request("GET", "/")[2])
+
+    def test_coloring_collection_draft_and_publication(self):
+        self.sign_in()
+        draft = empty()
+        still = {"id": "new-still", "type": "image", "title": "New still", "text": "", "layout": "landscape",
+                 "target": "coloring-stills", "url": "https://example.com/still.jpg", "active": True}
+        comparison = {"id": "test-comparison", "type": "comparison", "title": "Test comparison <example>",
+                      "text": "", "layout": "landscape", "target": "coloring-comparisons", "active": True,
+                      "url": "https://example.com/final.jpg", "log": ""}
+        draft["home"] = [still, comparison]
+        self.assertEqual(self.action("save", {"revision": 0, "draft": draft})[0], 400)
+        comparison["active"] = False
+        self.assertEqual(self.action("save", {"revision": 0, "draft": draft})[0], 200)
+        preview = self.action("preview")[2]
+        self.assertIn('data-cms-select="new-still"', preview)
+        self.assertNotIn('data-cms-select="test-comparison"', preview)
+        self.assertNotIn('alt="New still"', self.request("GET", "/")[2])
+        comparison.update(active=True, log="https://example.com/log.jpg")
+        original = next(item for item in schema()["items"] if item.get("target") == "coloring-stills")
+        draft["items"][original["id"]] = True
+        self.assertEqual(self.action("save", {"revision": 1, "draft": draft})[0], 200)
+        preview = self.action("preview")[2]
+        self.assertNotIn(f'data-cms-select="{original["id"]}"', preview)
+        self.assertIn('data-cms-select="test-comparison"', preview)
+        self.assertIn('Test comparison &lt;example&gt;', preview)
+        self.assertIn('src="https://example.com/log.jpg"', preview)
+        self.assertEqual(self.action("publish", {"revision": 2})[0], 200)
+        self.assertIn('Test comparison &lt;example&gt;', self.request("GET", "/")[2])
+        self.assertEqual(self.action("export")[2]["content"], draft)
+        draft["hidden"] = ["coloring"]
+        self.assertEqual(self.action("save", {"revision": 3, "draft": draft})[0], 200)
+        self.assertNotIn('id="coloring"', self.action("preview")[2])
 
     def test_redis_outage_serves_original_home_until_recovery(self):
         self.sign_in()

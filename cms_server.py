@@ -57,8 +57,10 @@ def backup(state, content, name):
 
 def login_secret():
     secret = os.getenv("CMS_ADMIN_PASSWORD", "")
+    if not secret:
+        raise StorageError("CMS_ADMIN_PASSWORD is missing from this deployment")
     if len(secret) < 20:
-        raise StorageError("Set CMS_ADMIN_PASSWORD to a unique password of at least 20 characters")
+        raise StorageError("The configured CMS_ADMIN_PASSWORD is shorter than 20 characters")
     return secret
 
 

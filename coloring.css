@@ -24,14 +24,16 @@ body:not(:has(#coloring)) .nav-links li:has(> a[href="#coloring"]) { display: no
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.6rem;
 }
-.grade-pair:first-child { grid-column: 1 / -1; }
+.grade-comparisons {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+  align-items: start;
+}
 .grade-swipe {
   --split: 50%;
   position: relative;
   isolation: isolate;
   overflow: hidden;
   background: #1b1916;
-  aspect-ratio: 16 / 9;
   touch-action: pan-y pinch-zoom;
 }
 .grade-swipe.is-draggable { cursor: ew-resize; user-select: none; }
@@ -40,6 +42,7 @@ body:not(:has(#coloring)) .nav-links li:has(> a[href="#coloring"]) { display: no
 .grade-swipe img { -webkit-user-drag: none; }
 .grade-swipe img, .grade-still img { display: block; width: 100%; }
 .grade-swipe img { position: absolute; inset: 0; height: 100%; object-fit: contain; }
+.grade-swipe .grade-final { position: relative; height: auto; }
 .grade-log { clip-path: inset(0 calc(100% - var(--split)) 0 0); }
 .grade-label {
   position: absolute;
@@ -94,12 +97,41 @@ body:not(:has(#coloring)) .nav-links li:has(> a[href="#coloring"]) { display: no
 #coloring:not(:has(.grade-still)) .grade-stills-heading { display: none; }
 .grade-stills { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .grade-still img { height: auto; background: #1b1916; }
+.grade-still figcaption { margin-top: .65rem; color: var(--gray); font-size: .8rem; }
 @media (max-width: 700px) {
   .grade-comparisons { grid-template-columns: minmax(0, 1fr); }
+  .grade-pair:nth-child(2) { max-width: 24rem; }
   .grade-stills { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grade-comparisons, .grade-stills { gap: .9rem; }
 }
 @media (max-width: 520px) {
   .hero-bottom .scroll-hint { display: none; }
   .hero-bottom .portfolio-choice { padding-inline: 1.2rem; }
+}
+
+.grade-stills {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: .7rem;
+}
+.grade-project {
+  min-width: 0;
+  border-block-start: 1px solid rgba(255, 255, 255, .16);
+}
+.grade-project summary {
+  padding: 1rem .25rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+.grade-project summary::marker { color: var(--gold); }
+.grade-project summary:focus-visible { outline: 2px solid var(--gold); }
+.grade-project-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: .85rem;
+  padding-block: .25rem 1.4rem;
+}
+@media (max-width: 550px) {
+  .grade-project-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

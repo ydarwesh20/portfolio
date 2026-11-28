@@ -135,3 +135,41 @@ body:not(:has(#coloring)) .nav-links li:has(> a[href="#coloring"]) { display: no
 @media (max-width: 550px) {
   .grade-project-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.grade-comparisons {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.1rem;
+}
+.grade-comparisons > .grade-pair:first-child { grid-column: 1 / -1; }
+.grade-comparisons > .grade-pair:not(:first-child) .grade-swipe {
+  max-width: 100%;
+  width: fit-content;
+  margin-inline: auto;
+}
+.grade-comparisons > .grade-pair:not(:first-child) .grade-final {
+  width: auto;
+  max-width: 100%;
+  max-height: 15rem;
+}
+.grade-comparisons > .grade-pair:not(:first-child) figcaption { text-align: center; }
+.grade-project {
+  border: 1px solid rgba(255,255,255,.14);
+  background: #141311;
+}
+.grade-project summary {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .75rem;
+  list-style: none;
+}
+.grade-project summary::-webkit-details-marker { display: none; }
+.grade-project summary::after { content: '+'; margin-inline-start: auto; color: var(--gold); padding-inline: .4rem; }
+.grade-project[open] summary::after { content: '−'; }
+.grade-project summary img { width: clamp(76px,15vw,150px); aspect-ratio: 16 / 9; object-fit: cover; }
+.grade-project-grid { padding-inline: .75rem; }
+@media (max-width: 550px) {
+  .grade-comparisons { gap: .55rem; }
+  .grade-comparisons > .grade-pair:nth-child(2) { max-width: none; }
+  .grade-comparisons > .grade-pair:not(:first-child) .grade-label { display: none; }
+}

@@ -415,8 +415,27 @@ def galleries():
     return result
 
 
+def migrate_coloring(data):
+    """Ignore overrides for Coloring slots retired by the project gallery."""
+    _, fields, items, _, _, _, _ = catalog()
+    def current(key, valid):
+        return not key.startswith("coloring-") or key in valid
+    return {
+        **data,
+        "fields": {key: value for key, value in data["fields"].items()
+                   if current(key, fields)},
+        "items": {key: value for key, value in data["items"].items()
+                  if current(key, items)},
+        "itemOrder": [key for key in data["itemOrder"] if current(key, items)],
+    }
+
+
 def validate(data):
     require(isinstance(data, dict) and set(data) == set(empty()), "Unsupported document format")
+    if (isinstance(data["fields"], dict) and isinstance(data["items"], dict)
+            and isinstance(data["itemOrder"], list)
+            and all(isinstance(key, str) for key in data["itemOrder"])):
+        data = migrate_coloring(data)
     groups, fields, items, _, _, _, _ = catalog()
     require(isinstance(data["fields"], dict) and set(data["fields"]) <= set(fields) | RETIRED_TITLE_FIELDS,
             "Unknown content field")
@@ -587,6 +606,7 @@ def meta_edits(edits, values, preview):
 
 
 def render(data, path="/", preview=False, analytics=False):
+    data = migrate_coloring(data)
     groups, fields, items, positions, nodes, _, _ = catalog()
     page = next((p for p in data["pages"] if path == "/pages/" + p["slug"]), None)
     if path != "/" and not page:
